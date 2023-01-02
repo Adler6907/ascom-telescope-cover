@@ -1,0 +1,5 @@
+D:\3D-Drucken\Thingiverse\Andreas\Astro\ascom-telescope-cover\ASCOM_Driver\obj\Debug\ASCOM.TelescopeCover.csproj.AssemblyReference.cache
+D:\3D-Drucken\Thingiverse\Andreas\Astro\ascom-telescope-cover\ASCOM_Driver\obj\Debug\ASCOM.TelescopeCover.Properties.Resources.resources
+D:\3D-Drucken\Thingiverse\Andreas\Astro\ascom-telescope-cover\ASCOM_Driver\obj\Debug\ASCOM.TelescopeCovers.SetupDialogForm.resources
+D:\3D-Drucken\Thingiverse\Andreas\Astro\ascom-telescope-cover\ASCOM_Driver\obj\Debug\ASCOM.TelescopeCover.csproj.GenerateResource.cache
+D:\3D-Drucken\Thingiverse\Andreas\Astro\ascom-telescope-cover\ASCOM_Driver\obj\Debug\ASCOM.TelescopeCover.csproj.CoreCompileInputs.cache

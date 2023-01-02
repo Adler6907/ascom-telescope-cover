@@ -4,292 +4,328 @@
  * Licensed under the MIT License. See the accompanying LICENSE file for terms.
  */
 
+// This is an extension for handling multiple telescope covers, each using a COM port
+// by Andreas Schminder
+
+using ASCOM.TelescopeCovers;
 using ASCOM.DeviceInterface;
 using ASCOM.Utilities;
-
 using System;
 using System.Collections;
 using System.Globalization;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.IO.Ports;
+using System.Threading;
+using System.Security.Cryptography;
 
-namespace ASCOM.DarkSkyGeek
+namespace ASCOM.TelescopeCovers
 {
-    //
-    // Your driver's DeviceID is ASCOM.DarkSkyGeek.Switch
-    //
-    // The Guid attribute sets the CLSID for ASCOM.DarkSkyGeek.Switch
-    // The ClassInterface/None attribute prevents an empty interface called
-    // _DarkSkyGeek from being created and used as the [default] interface
-    //
+	//
+	// Your driver's DeviceID is ASCOM.TelescopeCovers.Switch
+	//
+	// The Guid attribute sets the CLSID for ASCOM.TelescopeCovers.Switch
+	// The ClassInterface/None attribute prevents an empty interface called
+	// _TelescopeCovers from being created and used as the [default] interface
+	//
 
-    /// <summary>
-    /// ASCOM Switch Driver for DarkSkyGeek.
-    /// </summary>
-    [Guid("a8047099-516a-43f4-bf01-c714f2d144b4")]
-    [ClassInterface(ClassInterfaceType.None)]
-    public class Switch : ISwitchV2
-    {
-        /// <summary>
-        /// ASCOM DeviceID (COM ProgID) for this driver.
-        /// The DeviceID is used by ASCOM applications to load the driver at runtime.
-        /// </summary>
-        internal const string driverID = "ASCOM.DarkSkyGeek.Switch";
+	/// <summary>
+	/// ASCOM Switch Driver for TelescopeCovers.
+	/// </summary>
+	/// 
+	[Guid("a8047099-516a-43f4-bf01-c714f2d144b4")]
+	[ClassInterface(ClassInterfaceType.None)]
+	public class Switch : ISwitchV2
+	{
+		/// <summary>
+		/// ASCOM DeviceID (COM ProgID) for this driver.
+		/// The DeviceID is used by ASCOM applications to load the driver at runtime.
+		/// </summary>
+		internal const string driverID = "ASCOM.TelescopeCovers.Switch";
 
-        /// <summary>
-        /// Driver description that displays in the ASCOM Chooser.
-        /// </summary>
-        private static string deviceName = "DarkSkyGeek’s Telescope Cover";
+		/// <summary>
+		/// Driver description that displays in the ASCOM Chooser.
+		/// </summary>
+		private static string deviceName = "Telescope Covers";
+		private static string[] telescopeName;
 
-        // Constants used for Profile persistence
-        internal static string autoDetectComPortProfileName = "Auto-Detect COM Port";
-        internal static string autoDetectComPortDefault = "true";
-        internal static string comPortProfileName = "COM Port";
-        internal static string comPortDefault = "COM1";
-        internal static string traceStateProfileName = "Trace Level";
-        internal static string traceStateDefault = "false";
+		// Constants used for Profile persistence
+		internal static string autoDetectComPortProfileName = "Auto-Detect COM Port";
+		internal static string autoDetectComPortDefault = "true";
+		internal static string comPortProfileName = "COM Port";
+		internal static string comPortDefault = "COM1";
+		internal static string traceStateProfileName = "Trace Level";
+		internal static string traceStateDefault = "false";
 
-        // Variables to hold the current device configuration
-        internal static bool autoDetectComPort = Convert.ToBoolean(autoDetectComPortDefault);
-        internal static string comPortOverride = comPortDefault;
+		// Variables to hold the current device configuration
+		internal static bool autoDetectComPort = Convert.ToBoolean(autoDetectComPortDefault);
+		internal static string comPortOverride = comPortDefault;
 
-        /// <summary>
-        /// Private variable to hold the connected state
-        /// </summary>
-        private bool connectedState;
+		/// <summary>
+		/// Private variable to hold the connected state
+		/// </summary>
+		private bool connectedState;
 
-        /// <summary>
-        /// Private variable to hold the COM port we are actually connected to
-        /// </summary>
-        private string comPort;
+		/// <summary>
+		/// Private variable to hold the COM port we are actually connected to
+		/// </summary>
+		private string[] comPort;
 
-        /// <summary>
-        /// Variable to hold the trace logger object (creates a diagnostic log file with information that you specify)
-        /// </summary>
-        internal TraceLogger tl;
+		/// <summary>
+		/// Variable to hold the trace logger object (creates a diagnostic log file with information that you specify)
+		/// </summary>
+		internal TraceLogger tl;
 
-        // The object used to communicate with the device using serial port communication.
-        private Serial objSerial;
+		// The object used to communicate with the device using serial port communication.
+		private Serial[] objSerial;
+		private short i;
 
-        // Constants used to communicate with the device
-        // Make sure those values are identical to those in the Arduino Firmware.
-        // (I could not come up with an easy way to share them across the two projects)
-        private const string SEPARATOR = "\n";
+		// Constants used to communicate with the device
+		// Make sure those values are identical to those in the Arduino Firmware.
+		// (I could not come up with an easy way to share them across the two projects)
+		private const string SEPARATOR = "\n";
 
-        private const string DEVICE_GUID = "b45ba2c9-f554-4b4e-a43c-10605ca3b84d";
+		private const string DEVICE_GUID = "b45ba2c9-f554-4b4e-a43c-10605ca3b84d";
 
-        private const string COMMAND_PING = "COMMAND:PING";
-        private const string COMMAND_GETSTATE = "COMMAND:GETSTATE";
-        private const string COMMAND_OPEN = "COMMAND:OPEN";
-        private const string COMMAND_CLOSE = "COMMAND:CLOSE";
+		private const string COMMAND_PING = "COMMAND:PING";
+		private const string COMMAND_GETSTATE = "COMMAND:GETSTATE";
+		private const string COMMAND_NAME = "COMMAND:NAME";
+		private const string COMMAND_OPEN = "COMMAND:OPEN";
+		private const string COMMAND_CLOSE = "COMMAND:CLOSE";
 
-        private const string RESULT_PING = "RESULT:PING:OK:";
-        private const string RESULT_STATE_OPEN = "RESULT:STATE:OPEN";
-        private const string RESULT_STATE_CLOSED = "RESULT:STATE:CLOSED";
+		private const string RESULT_PING = "RESULT:PING:OK:";
+		private const string RESULT_STATE_OPEN = "RESULT:STATE:OPEN";
+		private const string RESULT_STATE_CLOSED = "RESULT:STATE:CLOSED";
+
+		private short numSwitch = 1;
+		private string SwitchDescription;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Switch"/> class.
         /// Must be public for COM registration.
         /// </summary>
+        /// 
         public Switch()
-        {
-            tl = new TraceLogger("", "DarkSkyGeek");
-            ReadProfile();
-            tl.LogMessage("Switch", "Starting initialisation");
-            connectedState = false;
-            tl.LogMessage("Switch", "Completed initialisation");
-        }
-
-        //
-        // PUBLIC COM INTERFACE ISwitchV2 IMPLEMENTATION
-        //
-
-        #region Common properties and methods.
-
-        /// <summary>
-        /// Displays the Setup Dialog form.
-        /// If the user clicks the OK button to dismiss the form, then
-        /// the new settings are saved, otherwise the old values are reloaded.
-        /// THIS IS THE ONLY PLACE WHERE SHOWING USER INTERFACE IS ALLOWED!
-        /// </summary>
-        public void SetupDialog()
-        {
-            // consider only showing the setup dialog if not connected
-            // or call a different dialog if connected
-            if (IsConnected)
-                System.Windows.Forms.MessageBox.Show("Already connected, just press OK");
-
-            using (SetupDialogForm F = new SetupDialogForm(tl))
+		{
+			tl = new TraceLogger("", "Telescope Covers");
+			ReadProfile();
+			tl.LogMessage("Switch", "Starting initialisation");
+			connectedState = false;
+			tl.LogMessage("Switch", "Completed initialisation");
+            if (System.Threading.Thread.CurrentThread.CurrentUICulture.TwoLetterISOLanguageName == "de")
             {
-                var result = F.ShowDialog();
-                if (result == System.Windows.Forms.DialogResult.OK)
-                {
-                    // Persist device configuration values to the ASCOM Profile store
-                    WriteProfile();
-                }
+                SwitchDescription = "Öffnen und Schließen der Teleskopabdeckung von \"";
+
+            }
+			else
+			{
+                SwitchDescription = "Automatically opens or closes the telescope cover \"";
+
             }
         }
+		//
+		// PUBLIC COM INTERFACE ISwitchV2 IMPLEMENTATION
+		//
 
-        public ArrayList SupportedActions
-        {
-            get
-            {
-                tl.LogMessage("SupportedActions Get", "Returning empty arraylist");
-                return new ArrayList();
-            }
-        }
+		#region Common properties and methods.
 
-        public string Action(string actionName, string actionParameters)
-        {
-            LogMessage("", "Action {0}, parameters {1} not implemented", actionName, actionParameters);
-            throw new ASCOM.ActionNotImplementedException("Action " + actionName + " is not implemented by this driver");
-        }
+		/// <summary>
+		/// Displays the Setup Dialog form.
+		/// If the user clicks the OK button to dismiss the form, then
+		/// the new settings are saved, otherwise the old values are reloaded.
+		/// THIS IS THE ONLY PLACE WHERE SHOWING USER INTERFACE IS ALLOWED!
+		/// </summary>
+		public void SetupDialog()
+		{
+			// consider only showing the setup dialog if not connected
+			// or call a different dialog if connected
+			if (IsConnected)
+				System.Windows.Forms.MessageBox.Show("Already connected, just press OK");
 
-        public void CommandBlind(string command, bool raw)
-        {
-            CheckConnected("CommandBlind");
+			using (SetupDialogForm F = new SetupDialogForm(tl))
+			{
+				var result = F.ShowDialog();
+				if (result == System.Windows.Forms.DialogResult.OK)
+				{
+					// Persist device configuration values to the ASCOM Profile store
+					WriteProfile();
+				}
+			}
+		}
+		public ArrayList SupportedActions
+		{
+			get
+			{
+				tl.LogMessage("SupportedActions Get", "Returning empty arraylist");
+				return new ArrayList();
+			}
+		}
 
-            // The optional CommandBlind method should either be implemented OR throw a MethodNotImplementedException
-            // If implemented, CommandBlind must send the supplied command to the device and return immediately without waiting for a response
+		public string Action(string actionName, string actionParameters)
+		{
+			LogMessage("", "Action {0}, parameters {1} not implemented", actionName, actionParameters);
+			throw new ActionNotImplementedException("Action " + actionName + " is not implemented by this driver");
+		}
 
-            throw new ASCOM.MethodNotImplementedException("CommandBlind");
-        }
+		public void CommandBlind(string command, bool raw)
+		{
+			CheckConnected("CommandBlind");
+			// The optional CommandBlind method should either be implemented OR throw a MethodNotImplementedException
+			// If implemented, CommandBlind must send the supplied command to the device and return immediately without waiting for a response
+			throw new MethodNotImplementedException("CommandBlind");
+		}
 
-        public bool CommandBool(string command, bool raw)
-        {
-            CheckConnected("CommandBool");
+		public bool CommandBool(string command, bool raw)
+		{
+			CheckConnected("CommandBool");
+			// The optional CommandBool method should either be implemented OR throw a MethodNotImplementedException
+			// If implemented, CommandBool must send the supplied command to the device, wait for a response and parse this to return a True or False value
 
-            // The optional CommandBool method should either be implemented OR throw a MethodNotImplementedException
-            // If implemented, CommandBool must send the supplied command to the device, wait for a response and parse this to return a True or False value
+			// string retString = CommandString(command, raw); // Send the command and wait for the response
+			// bool retBool = XXXXXXXXXXXXX; // Parse the returned string and create a boolean True / False value
+			// return retBool; // Return the boolean value to the client
+			throw new MethodNotImplementedException("CommandBool");
+		}
 
-            // string retString = CommandString(command, raw); // Send the command and wait for the response
-            // bool retBool = XXXXXXXXXXXXX; // Parse the returned string and create a boolean True / False value
-            // return retBool; // Return the boolean value to the client
+		public string CommandString(string command, bool raw)
+		{
+			CheckConnected("CommandString");
+			// The optional CommandString method should either be implemented OR throw a MethodNotImplementedException
+			// If implemented, CommandString must send the supplied command to the device and wait for a response before returning this to the client
+			throw new MethodNotImplementedException("CommandString");
+		}
 
-            throw new ASCOM.MethodNotImplementedException("CommandBool");
-        }
+		public void Dispose()
+		{
+			// Clean up the trace logger object
+			tl.Enabled = false;
+			tl.Dispose();
+			tl = null;
+			for (i = 0; i < numSwitch; i++)
+			{
+				objSerial[i].Connected = false;
+				objSerial[i].Dispose();
+				objSerial[i] = null;
+			}
+		}
+		public bool Connected
+		{
+			get
+			{
+				LogMessage("Connected", "Get {0}", IsConnected);
+				return IsConnected;
+			}
+			set
+			{
+				tl.LogMessage("Connected", "Set {0}", value);
+				if (value == IsConnected)
+				{
+					return;
+				}
+				if (value)
+				{
+					//Array initialisieren
+					CountingDevice();
+					comPort = new string[numSwitch];
+					objSerial = new Serial[numSwitch];
+					telescopeName = new string[numSwitch];
 
-        public string CommandString(string command, bool raw)
-        {
-            CheckConnected("CommandString");
+					if (autoDetectComPort && InitCOMPorts())
+					{
+						throw new InvalidValueException("Invalid InitCOMPorts", comPort[i].ToString(), string.Join(", ", SerialPort.GetPortNames()));
+					}
 
-            // The optional CommandString method should either be implemented OR throw a MethodNotImplementedException
-            // If implemented, CommandString must send the supplied command to the device and wait for a response before returning this to the client
+					for (i = 0; i < numSwitch; i++)
+					{
+						// Fallback, in case of detection error...
+						if (comPort[i] == null)
+						{
+							comPort[1] = comPortOverride;
+							i = 1;
+							numSwitch = 1;
 
-            throw new ASCOM.MethodNotImplementedException("CommandString");
-        }
-
-        public void Dispose()
-        {
-            // Clean up the trace logger object
-            tl.Enabled = false;
-            tl.Dispose();
-            tl = null;
-        }
-
-        public bool Connected
-        {
-            get
-            {
-                LogMessage("Connected", "Get {0}", IsConnected);
-                return IsConnected;
-            }
-            set
-            {
-                tl.LogMessage("Connected", "Set {0}", value);
-                if (value == IsConnected)
-                    return;
-
-                if (value)
-                {
-                    if (autoDetectComPort)
-                    {
-                        comPort = DetectCOMPort();
-                    }
-
-                    // Fallback, in case of detection error...
-                    if (comPort == null)
-                    {
-                        comPort = comPortOverride;
-                    }
-
-                    if (!System.IO.Ports.SerialPort.GetPortNames().Contains(comPort))
-                    {
-                        throw new InvalidValueException("Invalid COM port", comPort.ToString(), String.Join(", ", System.IO.Ports.SerialPort.GetPortNames()));
-                    }
-
-                    LogMessage("Connected Set", "Connecting to port {0}", comPort);
-
-                    objSerial = new Serial
-                    {
-                        Speed = SerialSpeed.ps57600,
-                        PortName = comPort,
-                        Connected = true
-                    };
-
-                    // Wait a second for the serial connection to establish
-                    System.Threading.Thread.Sleep(1000);
-
-                    objSerial.ClearBuffers();
-
-                    // Poll the device (with a short timeout value) until successful,
-                    // or until we've reached the retry count limit of 3...
-                    objSerial.ReceiveTimeout = 1;
-                    bool success = false;
-                    for (int retries = 3; retries >= 0; retries--)
-                    {
-                        string response = "";
-                        try
-                        {
-                            objSerial.Transmit(COMMAND_PING + SEPARATOR);
-                            response = objSerial.ReceiveTerminated(SEPARATOR).Trim();
                         }
-                        catch (Exception)
-                        {
-                            // PortInUse or Timeout exceptions may happen here!
-                            // We ignore them.
-                        }
-                        if (response == RESULT_PING + DEVICE_GUID)
-                        {
-                            success = true;
-                            break;
-                        }
-                    }
+						if (!SerialPort.GetPortNames().Contains(comPort[i]))
+						{
+							throw new InvalidValueException("Invalid COM port", comPort[i].ToString(), string.Join(", ", SerialPort.GetPortNames()));
+						}
+						
+						tl.LogMessage("Connected Set", "Connecting to port " + comPort[i] + " / i: " + i);
+						
+						objSerial[i] = new Serial
+						{
+							Speed = SerialSpeed.ps57600,
+							PortName = comPort[i],
+							Connected = true
+						};
 
-                    if (!success)
-                    {
-                        objSerial.Connected = false;
-                        objSerial.Dispose();
-                        objSerial = null;
-                        throw new ASCOM.NotConnectedException("Failed to connect");
-                    }
+                        // Wait a second for the serial connection to establish
+                        System.Threading.Thread.Sleep(1000);
+                        objSerial[i].ClearBuffers();
 
-                    // Restore default timeout value...
-                    objSerial.ReceiveTimeout = 10;
+						// Poll the device (with a short timeout value) until successful,
+						// or until we've reached the retry count limit of 3...
+						objSerial[i].ReceiveTimeout = 1;
+						bool success = false;
+						for (int retries = 3; retries >= 0; retries--)
+						{
+							string response = "";
+							try
+							{
+								objSerial[i].Transmit("COMMAND:PING\n");
+								response = objSerial[i].ReceiveTerminated("\n").Trim();
+							}
+							catch (Exception)
+							{
+								// PortInUse or Timeout exceptions may happen here!
+								// We ignore them.
+							}
+							if (response == RESULT_PING + DEVICE_GUID)
+								         // "RESULT:PING:OK:b45ba2c9-f554-4b4e-a43c-10605ca3b84d")
+							{
+								success = true;
+								break;
+							}
+						}
+						if (!success)
+						{
+							objSerial[i].Connected = false;
+							objSerial[i].Dispose();
+							objSerial[i] = null;
+							throw new NotConnectedException("Failed to connect");
+						}
+						// Restore default timeout value..
+						objSerial[i].ReceiveTimeout = 10;
+						connectedState = true;
+						tl.LogMessage("COMMAND:NAME", "Sending request to device...");
+						objSerial[i].Transmit("COMMAND:NAME\n");
+						tl.LogMessage("COMMAND:NAME", "Request sent to device!");
+						SetSwitchName(i, objSerial[i].ReceiveTerminated("\n").Trim());
+					}
+				}
+				else
+				{
+					for (i = 0; i < numSwitch; i++)
+					{
+						LogMessage("Connected Set", "Disconnecting from port {0}", comPort[i]);
+						connectedState = false;
+						objSerial[i].Connected = false;
+						objSerial[i].Dispose();
+						objSerial[i] = null;
+					}
+				}
+			}
+		}
 
-                    connectedState = true;
-                }
-                else
-                {
-                    connectedState = false;
+		public string Description
+		{
+			get
+			{
+				tl.LogMessage("Description Get", "Description: Handles several microcontrollers(given different names in the firmware), which are each connected to individual COM ports ");
 
-                    LogMessage("Connected Set", "Disconnecting from port {0}", comPort);
-
-                    objSerial.Connected = false;
-                    objSerial.Dispose();
-                    objSerial = null;
-                }
-            }
-        }
-
-        public string Description
-        {
-            get
-            {
-                tl.LogMessage("Description Get", deviceName);
-                return deviceName;
-            }
-        }
+                return "Description: Handles several microcontrollers (given different names in the firmware), which are each connected to individual COM ports ";
+			}
+		}
 
         public string DriverInfo
         {
@@ -324,44 +360,50 @@ namespace ASCOM.DarkSkyGeek
         }
 
         public string Name
-        {
-            get
-            {
-                tl.LogMessage("Name Get", deviceName);
-                return deviceName;
+		{
+			get
+			{
+				tl.LogMessage("Name Get", "ASCOM driver for multiple telescope covers");
+				return "ASCOM driver for multiple telescope covers";
+
             }
-        }
+		}
 
-        #endregion
+		#endregion
 
-        #region ISwitchV2 Implementation
+		#region ISwitchV2 Implementation
 
-        private short numSwitch = 1;
+		/// <summary>
+		/// The number of switches managed by this driver
+		/// </summary>
+		public short MaxSwitch
+		{
+			get
+			{
+				tl.LogMessage("MaxSwitch Get", numSwitch.ToString());
+				return numSwitch;
+			}
+		}
 
-        /// <summary>
-        /// The number of switches managed by this driver
-        /// </summary>
-        public short MaxSwitch
+		/// <summary>
+		/// Return the name of switch n
+		/// </summary>
+		/// <param name="id">The switch number to return</param>
+		/// <returns>
+		/// The name of the switch
+		/// </returns>
+		public string GetSwitchName(short id)
+		{
+			Validate("GetSwitchName", id);
+			tl.LogMessage("GetSwitchName", $"GetSwitchName({id})");
+			return telescopeName[id];
+		}
+
+        public string GetTelescopeName(short id)
         {
-            get
-            {
-                tl.LogMessage("MaxSwitch Get", numSwitch.ToString());
-                return this.numSwitch;
-            }
-        }
-
-        /// <summary>
-        /// Return the name of switch n
-        /// </summary>
-        /// <param name="id">The switch number to return</param>
-        /// <returns>
-        /// The name of the switch
-        /// </returns>
-        public string GetSwitchName(short id)
-        {
-            Validate("GetSwitchName", id);
-            tl.LogMessage("GetSwitchName", $"GetSwitchName({id})");
-            return deviceName;
+            Validate("GetTelescopeName", id);
+            tl.LogMessage("GetTelescopeName", $"GetTelescopeName({id})");
+            return telescopeName[id];
         }
 
         /// <summary>
@@ -370,232 +412,239 @@ namespace ASCOM.DarkSkyGeek
         /// <param name="id">The number of the switch whose name is to be set</param>
         /// <param name="name">The name of the switch</param>
         public void SetSwitchName(short id, string name)
-        {
-            Validate("SetSwitchName", id);
-            tl.LogMessage("SetSwitchName", $"SetSwitchName({id}) = {name} - not implemented");
-            throw new MethodNotImplementedException("SetSwitchName");
+		{
+			Validate("SetSwitchName", id);
+			tl.LogMessage("SetSwitchName", $"SetSwitchName({id}) = {name} - not implemented");
+			telescopeName[id] = name;
+		}
+
+		/// <summary>
+		/// Gets the description of the specified switch. This is to allow a fuller description of the switch to be returned, for example for a tool tip.
+		/// </summary>
+		/// <param name="id">The id.</param>
+		/// <exception cref="InvalidValueException">If id is outside the range 0 to MaxSwitch - 1</exception>
+		/// <returns></returns>
+		public string GetSwitchDescription(short id)
+		{
+			Validate("GetSwitchDescription", id);
+			tl.LogMessage("GetSwitchDescription", $"GetSwitchDescription({id})");
+			return SwitchDescription + telescopeName[id] + "\" -> " + comPort[id]; ;
         }
 
-        /// <summary>
-        /// Gets the description of the specified switch. This is to allow a fuller description of the switch to be returned, for example for a tool tip.
-        /// </summary>
-        /// <param name="id">The id.</param>
-        /// <exception cref="InvalidValueException">If id is outside the range 0 to MaxSwitch - 1</exception>
-        /// <returns></returns>
-        public string GetSwitchDescription(short id)
-        {
-            Validate("GetSwitchDescription", id);
-            tl.LogMessage("GetSwitchDescription", $"GetSwitchDescription({id})");
-            return "Automatically opens or closes the telescope cover";
-        }
+		/// <summary>
+		/// Reports whether the specified switch can be written to.
+		/// Returns false if the switch cannot be written to, for example a limit switch or a sensor.
+		/// </summary>
+		/// <param name="id">The number of the switch whose write state is to be returned</param>
+		/// <returns>
+		/// <c>true</c> if the switch can be written to, otherwise <c>false</c>.
+		/// </returns>
+		/// <exception cref="MethodNotImplementedException">If the method is not implemented</exception>
+		/// <exception cref="InvalidValueException">If id is outside the range 0 to MaxSwitch - 1</exception>
+		public bool CanWrite(short id)
+		{
+			bool writable = true;
+			Validate("CanWrite", id);
+			tl.LogMessage("CanWrite", $"CanWrite({id}): {writable}");
+			return true;
+		}
 
-        /// <summary>
-        /// Reports whether the specified switch can be written to.
-        /// Returns false if the switch cannot be written to, for example a limit switch or a sensor.
-        /// </summary>
-        /// <param name="id">The number of the switch whose write state is to be returned</param>
-        /// <returns>
-        /// <c>true</c> if the switch can be written to, otherwise <c>false</c>.
-        /// </returns>
-        /// <exception cref="MethodNotImplementedException">If the method is not implemented</exception>
-        /// <exception cref="InvalidValueException">If id is outside the range 0 to MaxSwitch - 1</exception>
-        public bool CanWrite(short id)
-        {
-            bool writable = true;
-            Validate("CanWrite", id);
-            // default behavour is to report true
-            tl.LogMessage("CanWrite", $"CanWrite({id}): {writable}");
-            return true;
-        }
+		#region Boolean switch members
 
-        #region Boolean switch members
+		/// <summary>
+		/// Return the state of switch n.
+		/// A multi-value switch must throw a not implemented exception
+		/// </summary>
+		/// <param name="id">The switch number to return</param>
+		/// <returns>
+		/// True or false
+		/// </returns>
+		public bool GetSwitch(short id)
+		{
+			Validate("GetSwitch", id);
+			tl.LogMessage("GetSwitch", $"GetSwitch({id})");
+			return QueryDeviceState(id);
+		}
 
-        /// <summary>
-        /// Return the state of switch n.
-        /// A multi-value switch must throw a not implemented exception
-        /// </summary>
-        /// <param name="id">The switch number to return</param>
-        /// <returns>
-        /// True or false
-        /// </returns>
-        public bool GetSwitch(short id)
-        {
-            Validate("GetSwitch", id);
-            tl.LogMessage("GetSwitch", $"GetSwitch({id})");
-            return QueryDeviceState();
-        }
+		/// <summary>
+		/// Sets a switch to the specified state
+		/// If the switch cannot be set then throws a MethodNotImplementedException.
+		/// </summary>
+		/// <param name="id"></param>
+		/// <param name="state"></param>
+		public void SetSwitch(short id, bool state)
+		{
+			Validate("SetSwitch", id);
+			if (!CanWrite(id))
+			{
+				string str = $"SetSwitch({id}) - Cannot Write";
+				tl.LogMessage("SetSwitch", str);
+				throw new MethodNotImplementedException(str);
+			}
+			tl.LogMessage("SetSwitch", $"SetSwitch({id}) = {state}");
+			if (state)
+			{
+				OpenCover(id);
+			}
+			else
+			{
+				CloseCover(id);
+			}
+		}
 
-        /// <summary>
-        /// Sets a switch to the specified state
-        /// If the switch cannot be set then throws a MethodNotImplementedException.
-        /// </summary>
-        /// <param name="id"></param>
-        /// <param name="state"></param>
-        public void SetSwitch(short id, bool state)
-        {
-            Validate("SetSwitch", id);
-            if (!CanWrite(id))
-            {
-                var str = $"SetSwitch({id}) - Cannot Write";
-                tl.LogMessage("SetSwitch", str);
-                throw new MethodNotImplementedException(str);
-            }
-            tl.LogMessage("SetSwitch", $"SetSwitch({id}) = {state}");
-            if (state)
-                OpenCover();
-            else
-                CloseCover();
-        }
+		#endregion
 
-        #endregion
+		#region Analogue members
 
-        #region Analogue members
+		/// <summary>
+		/// Returns the maximum value for this switch
+		/// Boolean switches must return 1.0
+		/// </summary>
+		/// <param name="id"></param>
+		/// <returns></returns>
+		public double MaxSwitchValue(short id)
+		{
+			Validate("MaxSwitchValue", id);
+			tl.LogMessage("MaxSwitchValue", $"MaxSwitchValue({id})");
+			return 1.0;
+		}
 
-        /// <summary>
-        /// Returns the maximum value for this switch
-        /// Boolean switches must return 1.0
-        /// </summary>
-        /// <param name="id"></param>
-        /// <returns></returns>
-        public double MaxSwitchValue(short id)
-        {
-            Validate("MaxSwitchValue", id);
-            tl.LogMessage("MaxSwitchValue", $"MaxSwitchValue({id})");
-            return 1.0;
-        }
+		/// <summary>
+		/// Returns the minimum value for this switch
+		/// Boolean switches must return 0.0
+		/// </summary>
+		/// <param name="id"></param>
+		/// <returns></returns>
+		public double MinSwitchValue(short id)
+		{
+			Validate("MinSwitchValue", id);
+			tl.LogMessage("MinSwitchValue", $"MinSwitchValue({id})");
+			return 0.0;
+		}
 
-        /// <summary>
-        /// Returns the minimum value for this switch
-        /// Boolean switches must return 0.0
-        /// </summary>
-        /// <param name="id"></param>
-        /// <returns></returns>
-        public double MinSwitchValue(short id)
-        {
-            Validate("MinSwitchValue", id);
-            tl.LogMessage("MinSwitchValue", $"MinSwitchValue({id})");
-            return 0.0;
-        }
+		/// <summary>
+		/// Returns the step size that this switch supports. This gives the difference between successive values of the switch.
+		/// The number of values is ((MaxSwitchValue - MinSwitchValue) / SwitchStep) + 1
+		/// boolean switches must return 1.0, giving two states.
+		/// </summary>
+		/// <param name="id"></param>
+		/// <returns></returns>
+		public double SwitchStep(short id)
+		{
+			Validate("SwitchStep", id);
+			tl.LogMessage("SwitchStep", $"SwitchStep({id})");
+			return 1.0;
+		}
 
-        /// <summary>
-        /// Returns the step size that this switch supports. This gives the difference between successive values of the switch.
-        /// The number of values is ((MaxSwitchValue - MinSwitchValue) / SwitchStep) + 1
-        /// boolean switches must return 1.0, giving two states.
-        /// </summary>
-        /// <param name="id"></param>
-        /// <returns></returns>
-        public double SwitchStep(short id)
-        {
-            Validate("SwitchStep", id);
-            tl.LogMessage("SwitchStep", $"SwitchStep({id})");
-            return 1.0;
-        }
+		/// <summary>
+		/// Returns the analogue switch value for switch id.
+		/// Boolean switches must return either 0.0 (false) or 1.0 (true).
+		/// </summary>
+		/// <param name="id"></param>
+		/// <returns></returns>
+		public double GetSwitchValue(short id)
+		{
+			Validate("GetSwitchValue", id);
+			tl.LogMessage("GetSwitchValue", $"GetSwitchValue({id}) - not implemented");
+			return QueryDeviceState(id) ? 1.0 : 0.0;
+		}
 
-        /// <summary>
-        /// Returns the analogue switch value for switch id.
-        /// Boolean switches must return either 0.0 (false) or 1.0 (true).
-        /// </summary>
-        /// <param name="id"></param>
-        /// <returns></returns>
-        public double GetSwitchValue(short id)
-        {
-            Validate("GetSwitchValue", id);
-            tl.LogMessage("GetSwitchValue", $"GetSwitchValue({id}) - not implemented");
-            return QueryDeviceState() ? 1.0 : 0.0;
-        }
+		/// <summary>
+		/// Set the analogue value for this switch.
+		/// A MethodNotImplementedException should be thrown if CanWrite returns False
+		/// If the value is not between the maximum and minimum then throws an InvalidValueException
+		/// </summary>
+		/// <param name="id"></param>
+		/// <param name="value"></param>
+		public void SetSwitchValue(short id, double value)
+		{
+			Validate("SetSwitchValue", id, value);
+			if (!CanWrite(id))
+			{
+				tl.LogMessage("SetSwitchValue", $"SetSwitchValue({id}) - Cannot write");
+				throw new MethodNotImplementedException($"SetSwitchValue({id}) - Cannot write");
+			}
+			tl.LogMessage("SetSwitchValue", $"SetSwitchValue({id}) = {value}");
+			if (value == 1.0)
+			{
+				OpenCover(id);
+			}
+			else
+			{
+				CloseCover(id);
+			}
+		}
 
-        /// <summary>
-        /// Set the analogue value for this switch.
-        /// A MethodNotImplementedException should be thrown if CanWrite returns False
-        /// If the value is not between the maximum and minimum then throws an InvalidValueException
-        /// </summary>
-        /// <param name="id"></param>
-        /// <param name="value"></param>
-        public void SetSwitchValue(short id, double value)
-        {
-            Validate("SetSwitchValue", id, value);
-            if (!CanWrite(id))
-            {
-                tl.LogMessage("SetSwitchValue", $"SetSwitchValue({id}) - Cannot write");
-                throw new ASCOM.MethodNotImplementedException($"SetSwitchValue({id}) - Cannot write");
-            }
-            tl.LogMessage("SetSwitchValue", $"SetSwitchValue({id}) = {value}");
-            if (value == 1.0)
-                OpenCover();
-            else
-                CloseCover();
-        }
+		#endregion
 
-        #endregion
+		#endregion
 
-        #endregion
+		#region Private methods
 
-        #region Private methods
+		/// <summary>
+		/// Checks that the switch id is in range and throws an InvalidValueException if it isn't
+		/// </summary>
+		/// <param name="message">The message.</param>
+		/// <param name="id">The id.</param>
+		private void Validate(string message, short id)
+		{
+			if (id < 0 || id >= numSwitch)
+			{
+				tl.LogMessage(message, $"Switch {id} not available, range is 0 to {numSwitch - 1}");
+				throw new InvalidValueException(message, id.ToString(), $"0 to {numSwitch - 1}");
+			}
+		}
 
-        /// <summary>
-        /// Checks that the switch id is in range and throws an InvalidValueException if it isn't
-        /// </summary>
-        /// <param name="message">The message.</param>
-        /// <param name="id">The id.</param>
-        private void Validate(string message, short id)
-        {
-            if (id < 0 || id >= numSwitch)
-            {
-                tl.LogMessage(message, string.Format("Switch {0} not available, range is 0 to {1}", id, numSwitch - 1));
-                throw new InvalidValueException(message, id.ToString(), string.Format("0 to {0}", numSwitch - 1));
-            }
-        }
+		/// <summary>
+		/// Checks that the switch id and value are in range and throws an
+		/// InvalidValueException if they are not.
+		/// </summary>
+		/// <param name="message">The message.</param>
+		/// <param name="id">The id.</param>
+		/// <param name="value">The value.</param>
+		private void Validate(string message, short id, double value)
+		{
+			Validate(message, id);
+			double min = MinSwitchValue(id);
+			double max = MaxSwitchValue(id);
+			if (value < min || value > max)
+			{
+				tl.LogMessage(message, string.Format("Value {1} for Switch {0} is out of the allowed range {2} to {3}", id, value, min, max));
+				throw new InvalidValueException(message, value.ToString(), $"Switch({id}) range {min} to {max}");
+			}
+		}
 
-        /// <summary>
-        /// Checks that the switch id and value are in range and throws an
-        /// InvalidValueException if they are not.
-        /// </summary>
-        /// <param name="message">The message.</param>
-        /// <param name="id">The id.</param>
-        /// <param name="value">The value.</param>
-        private void Validate(string message, short id, double value)
-        {
-            Validate(message, id);
-            var min = MinSwitchValue(id);
-            var max = MaxSwitchValue(id);
-            if (value < min || value > max)
-            {
-                tl.LogMessage(message, string.Format("Value {1} for Switch {0} is out of the allowed range {2} to {3}", id, value, min, max));
-                throw new InvalidValueException(message, value.ToString(), string.Format("Switch({0}) range {1} to {2}", id, min, max));
-            }
-        }
+		#endregion
 
-        #endregion
+		#region Private properties and methods
+		// here are some useful properties and methods that can be used as required
+		// to help with driver development
 
-        #region Private properties and methods
-        // here are some useful properties and methods that can be used as required
-        // to help with driver development
+		#region ASCOM Registration
 
-        #region ASCOM Registration
-
-        // Register or unregister driver for ASCOM. This is harmless if already
-        // registered or unregistered.
-        //
-        /// <summary>
-        /// Register or unregister the driver with the ASCOM Platform.
-        /// This is harmless if the driver is already registered/unregistered.
-        /// </summary>
-        /// <param name="bRegister">If <c>true</c>, registers the driver, otherwise unregisters it.</param>
-        private static void RegUnregASCOM(bool bRegister)
-        {
-            using (var P = new ASCOM.Utilities.Profile())
-            {
-                P.DeviceType = "Switch";
-                if (bRegister)
-                {
-                    P.Register(driverID, deviceName);
-                }
-                else
-                {
-                    P.Unregister(driverID);
-                }
-            }
-        }
+		// Register or unregister driver for ASCOM. This is harmless if already
+		// registered or unregistered.
+		//
+		/// <summary>
+		/// Register or unregister the driver with the ASCOM Platform.
+		/// This is harmless if the driver is already registered/unregistered.
+		/// </summary>
+		/// <param name="bRegister">If <c>true</c>, registers the driver, otherwise unregisters it.</param>
+		private static void RegUnregASCOM(bool bRegister)
+		{
+			using (var P = new ASCOM.Utilities.Profile())
+			{
+				P.DeviceType = "Switch";
+				if (bRegister)
+				{
+					P.Register(driverID, deviceName);
+				}
+				else
+				{
+					P.Unregister(driverID);
+				}
+			}
+		}
 
         /// <summary>
         /// This function registers the driver with the ASCOM Chooser and
@@ -638,35 +687,35 @@ namespace ASCOM.DarkSkyGeek
         /// This technique should mean that it is never necessary to manually unregister a driver from ASCOM.
         /// </remarks>
         [ComUnregisterFunction]
-        public static void UnregisterASCOM(Type t)
-        {
-            RegUnregASCOM(false);
-        }
+		public static void UnregisterASCOM(Type t)
+		{
+			RegUnregASCOM(false);
+		}
 
-        #endregion
+		#endregion
 
-        /// <summary>
-        /// Returns true if there is a valid connection to the driver hardware
-        /// </summary>
-        private bool IsConnected
-        {
-            get
-            {
-                return connectedState;
-            }
-        }
+		/// <summary>
+		/// Returns true if there is a valid connection to the driver hardware
+		/// </summary>
+		private bool IsConnected
+		{
+			get
+			{
+				return connectedState;
+			}
+		}
 
-        /// <summary>
-        /// Use this function to throw an exception if we aren't connected to the hardware
-        /// </summary>
-        /// <param name="message"></param>
-        private void CheckConnected(string message)
-        {
-            if (!IsConnected)
-            {
-                throw new ASCOM.NotConnectedException(message);
-            }
-        }
+		/// <summary>
+		/// Use this function to throw an exception if we aren't connected to the hardware
+		/// </summary>
+		/// <param name="message"></param>
+		private void CheckConnected(string message)
+		{
+			if (!IsConnected)
+			{
+				throw new NotConnectedException(message);
+			}
+		}
 
         /// <summary>
         /// Read the device configuration from the ASCOM Profile store
@@ -699,127 +748,180 @@ namespace ASCOM.DarkSkyGeek
             }
         }
 
-        internal string DetectCOMPort()
-        {
-            foreach (string portName in System.IO.Ports.SerialPort.GetPortNames())
-            {
-                Serial serial = null;
+        private void CountingDevice()
+		{
+			numSwitch = 0;
+			string[] portNames = SerialPort.GetPortNames();
+			foreach (string portName in portNames)
+			{
+				Serial serial = null;
+				try
+				{
+					serial = new Serial
+					{
+						Speed = SerialSpeed.ps57600,
+						PortName = portName,
+						Connected = true,
+						ReceiveTimeout = 1
+					};
+				}
+				catch (Exception)
+				{
+					continue;
+				}
+                System.Threading.Thread.Sleep(1000);
+				serial.ClearBuffers();
+				for (int retries = 0; retries >= 0; retries--)
+				{
+					string response = "";
+					try
+					{
+						serial.Transmit("COMMAND:PING\n");
+						response = serial.ReceiveTerminated("\n").Trim();
+					}
+					catch (Exception)
+					{
+					}
+                    if (response == RESULT_PING + DEVICE_GUID)
+								    // "RESULT:PING:OK:b45ba2c9-f554-4b4e-a43c-10605ca3b84d"
+					{
+                        numSwitch++;
+					}
+				}
+				serial.Connected = false;
+				serial.Dispose();
+			}
+			tl.LogMessage("numSwitch: ", numSwitch.ToString());
+		}
 
-                try
-                {
-                    serial = new Serial
-                    {
-                        Speed = SerialSpeed.ps57600,
-                        PortName = portName,
-                        Connected = true,
-                        ReceiveTimeout = 1
-                    };
-                }
-                catch (Exception)
-                {
-                    // If trying to connect to a port that is already in use, an exception will be thrown.
-                    continue;
-                }
-
+		internal bool InitCOMPorts()
+		{
+			int CountId = 0;
+			string[] portNames = SerialPort.GetPortNames();
+			foreach (string portName in portNames)
+			{
+				Serial serial = null;
+				try
+				{
+					serial = new Serial
+					{
+						Speed = SerialSpeed.ps57600,
+						PortName = portName,
+						Connected = true,
+						ReceiveTimeout = 1
+					};
+				}
+				catch (Exception)
+				{
+					// If trying to connect to a port that is already in use, an exception will be thrown.
+					continue;
+				}
                 // Wait a second for the serial connection to establish
                 System.Threading.Thread.Sleep(1000);
-
                 serial.ClearBuffers();
 
-                // Poll the device (with a short timeout value) until successful,
-                // or until we've reached the retry count limit of 3...
-                bool success = false;
-                for (int retries = 3; retries >= 0; retries--)
-                {
-                    string response = "";
-                    try
-                    {
-                        serial.Transmit(COMMAND_PING + SEPARATOR);
-                        response = serial.ReceiveTerminated(SEPARATOR).Trim();
-                    }
-                    catch (Exception)
-                    {
-                        // PortInUse or Timeout exceptions may happen here!
-                        // We ignore them.
-                    }
-                    if (response == RESULT_PING + DEVICE_GUID)
-                    {
-                        success = true;
-                        break;
-                    }
-                }
+				// Poll the device (with a short timeout value) until successful,
+				// or until we've reached the retry count limit of 3...
+				bool success = false;
+				for (int retries = 3; retries >= 0; retries--)
+				{
+					string response = "";
+					try
+					{
+						serial.Transmit("COMMAND:PING\n");
+						response = serial.ReceiveTerminated("\n").Trim();
+					}
+					catch (Exception)
+					{
+						// PortInUse or Timeout exceptions may happen here!
+						// We ignore them.
+					}
+					if (response == RESULT_PING + DEVICE_GUID)
+						           // "RESULT:PING:OK:b45ba2c9-f554-4b4e-a43c-10605ca3b84d"
+					{
+						success = true;
+						break;
+					}
+				}
+				serial.Connected = false;
+				serial.Dispose();
+				if (success)
+				{
+					comPort[CountId] = portName;
+					tl.LogMessage("comPort[CountId]", "comPort[" + CountId + "] : " + comPort[CountId]);
+					if (CountId == numSwitch)
+					{
+						return true;
+					}
+					CountId++;
+				}
+			}
+			return false;
+		}
 
-                serial.Connected = false;
-                serial.Dispose();
+		/// <summary>
+		/// Log helper function that takes formatted strings and arguments
+		/// </summary>
+		/// <param name="identifier"></param>
+		/// <param name="message"></param>
+		/// <param name="args"></param>
+		internal void LogMessage(string identifier, string message, params object[] args)
+		{
+			string msg = string.Format(message, args);
+			tl.LogMessage(identifier, msg);
+		}
 
-                if (success)
-                {
-                    return portName;
-                }
-            }
+		/// <summary>
+		/// Sends a COMMAND:GETSTATE command to the device and return its value as a boolean
+		/// </summary>
+		private bool QueryDeviceState(short id)
+		{
+			tl.LogMessage("QueryDeviceState", "Sending request to device...");
+			objSerial[id].Transmit("COMMAND:GETSTATE\n");
+			tl.LogMessage("QueryDeviceState", "Waiting for response from device...");
+			string response;
+			try
+			{
+				response = objSerial[id].ReceiveTerminated("\n").Trim();
+			}
+			catch (Exception e)
+			{
+				tl.LogMessage("QueryDeviceState", "Exception: " + e.Message);
+				throw e;
+			}
+			tl.LogMessage("QueryDeviceState", "Response from device: " + response);
+			if (response == "RESULT:STATE:OPEN")
+			{
+				return true;
+			}
+			if (response == "RESULT:STATE:CLOSED")
+			{
+				return false;
+			}
+			tl.LogMessage("QueryDeviceState", "Invalid response from device: " + response);
+			throw new DriverException("Invalid response from device: " + response);
+		}
 
-            return null;
-        }
+		/// <summary>
+		/// Sends a COMMAND:OPEN command to the device and wait until it responds
+		/// </summary>
+		private void OpenCover(short id)
+		{
+			tl.LogMessage("OpenCover", "Sending request to device...");
+			objSerial[id].Transmit("COMMAND:OPEN\n");
+			tl.LogMessage("OpenCover", "Request sent to device!");
+		}
 
-        /// <summary>
-        /// Log helper function that takes formatted strings and arguments
-        /// </summary>
-        /// <param name="identifier"></param>
-        /// <param name="message"></param>
-        /// <param name="args"></param>
-        internal void LogMessage(string identifier, string message, params object[] args)
-        {
-            var msg = string.Format(message, args);
-            tl.LogMessage(identifier, msg);
-        }
+		/// <summary>
+		/// Sends a COMMAND:CLOSE command to the device and wait until it responds
+		/// </summary>
+		private void CloseCover(short id)
+		{
+			tl.LogMessage("CloseCover", "Sending request to device...");
+			objSerial[id].Transmit("COMMAND:CLOSE\n");
+			tl.LogMessage("CloseCover", "Request sent to device!");
+		}
+		#endregion
+	}
 
-        /// <summary>
-        /// Sends a COMMAND:GETSTATE command to the device and return its value as a boolean
-        /// </summary>
-        private bool QueryDeviceState()
-        {
-            tl.LogMessage("QueryDeviceState", "Sending request to device...");
-            objSerial.Transmit(COMMAND_GETSTATE + SEPARATOR);
-            tl.LogMessage("QueryDeviceState", "Waiting for response from device...");
-            string response;
-            try
-            {
-                response = objSerial.ReceiveTerminated(SEPARATOR).Trim();
-            }
-            catch (Exception e)
-            {
-                tl.LogMessage("QueryDeviceState", "Exception: " + e.Message);
-                throw e;
-            }
-            tl.LogMessage("QueryDeviceState", "Response from device: " + response);
-            if (response == RESULT_STATE_OPEN)
-                return true;
-            if (response == RESULT_STATE_CLOSED)
-                return false;
-            tl.LogMessage("QueryDeviceState", "Invalid response from device: " + response);
-            throw new ASCOM.DriverException("Invalid response from device: " + response);
-        }
-
-        /// <summary>
-        /// Sends a COMMAND:OPEN command to the device and wait until it responds
-        /// </summary>
-        private void OpenCover()
-        {
-            tl.LogMessage("OpenCover", "Sending request to device...");
-            objSerial.Transmit(COMMAND_OPEN + SEPARATOR);
-            tl.LogMessage("OpenCover", "Request sent to device!");
-        }
-
-        /// <summary>
-        /// Sends a COMMAND:CLOSE command to the device and wait until it responds
-        /// </summary>
-        private void CloseCover()
-        {
-            tl.LogMessage("CloseCover", "Sending request to device...");
-            objSerial.Transmit(COMMAND_CLOSE + SEPARATOR);
-            tl.LogMessage("CloseCover", "Request sent to device!");
-        }
-
-        #endregion
-    }
 }

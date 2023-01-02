@@ -3,7 +3,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
-namespace ASCOM.DarkSkyGeek
+namespace ASCOM.TelescopeCovers
 {
     // Form not registered for COM!
     [ComVisible(false)]
