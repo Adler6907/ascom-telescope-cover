@@ -1,5 +1,23 @@
 # ASCOM-Compatible Telescope Cover
 
+This branch is an extension. Several microcontrollers can be connected. the ASCOM driver handles several COM interfaces.
+Added a console program. This can be used to open or close individual or all covers or to call up the status via parameters.
+I made these so that you can work with N.I.N.A. use the covers via an external script in the sequencer. This was necessary for me because in N.I.N.A. already connected a switch (Pegasus Powerbox).
+
+It is important that each microcontroller gets firmware with a unique name. See in "Arduino_Firmware.ino".
+
+I renamed the ASCOM profile for the switch to "ASCOM.TelescopeCovers.Switch". However, anyone can change this in the ASCOM profile editor or in the source (SwitchDriver.cs and Program.cs).
+
+![3D Rendering](N.I.N.A.jpg)
+
+![3D Rendering](DOS1.jpg)
+
+![3D Rendering](DOS2.jpg)
+
+![3D Rendering](DOS3b.jpg)
+
+Thanks to Julien
+
 <!-- toc -->
 
 - [Introduction](#introduction)
