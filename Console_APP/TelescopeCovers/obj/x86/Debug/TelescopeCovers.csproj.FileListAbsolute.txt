@@ -1,0 +1,17 @@
+C:\Users\Andreas\source\repos\TelescopeCovers\TelescopeCovers\bin\Debug\TelescopeCover.exe.config
+C:\Users\Andreas\source\repos\TelescopeCovers\TelescopeCovers\bin\Debug\TelescopeCover.exe
+C:\Users\Andreas\source\repos\TelescopeCovers\TelescopeCovers\bin\Debug\TelescopeCover.pdb
+C:\Users\Andreas\source\repos\TelescopeCovers\TelescopeCovers\bin\Debug\ASCOM.DeviceInterfaces.dll
+C:\Users\Andreas\source\repos\TelescopeCovers\TelescopeCovers\bin\Debug\ASCOM.DriverAccess.dll
+C:\Users\Andreas\source\repos\TelescopeCovers\TelescopeCovers\bin\Debug\ASCOM.Utilities.dll
+C:\Users\Andreas\source\repos\TelescopeCovers\TelescopeCovers\bin\Debug\ASCOM.Exceptions.dll
+C:\Users\Andreas\source\repos\TelescopeCovers\TelescopeCovers\bin\Debug\ASCOM.DeviceInterfaces.xml
+C:\Users\Andreas\source\repos\TelescopeCovers\TelescopeCovers\bin\Debug\ASCOM.DriverAccess.xml
+C:\Users\Andreas\source\repos\TelescopeCovers\TelescopeCovers\bin\Debug\ASCOM.Utilities.xml
+C:\Users\Andreas\source\repos\TelescopeCovers\TelescopeCovers\bin\Debug\ASCOM.Exceptions.xml
+C:\Users\Andreas\source\repos\TelescopeCovers\TelescopeCovers\obj\x86\Debug\TelescopeCovers.csproj.AssemblyReference.cache
+C:\Users\Andreas\source\repos\TelescopeCovers\TelescopeCovers\obj\x86\Debug\TelescopeCovers.csproj.SuggestedBindingRedirects.cache
+C:\Users\Andreas\source\repos\TelescopeCovers\TelescopeCovers\obj\x86\Debug\TelescopeCovers.csproj.CoreCompileInputs.cache
+C:\Users\Andreas\source\repos\TelescopeCovers\TelescopeCovers\obj\x86\Debug\TelescopeCovers.csproj.CopyComplete
+C:\Users\Andreas\source\repos\TelescopeCovers\TelescopeCovers\obj\x86\Debug\TelescopeCover.exe
+C:\Users\Andreas\source\repos\TelescopeCovers\TelescopeCovers\obj\x86\Debug\TelescopeCover.pdb
