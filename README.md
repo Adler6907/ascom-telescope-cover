@@ -8,13 +8,13 @@ It is important that each microcontroller gets firmware with a unique name. See 
 
 I renamed the ASCOM profile for the switch to "ASCOM.TelescopeCovers.Switch". However, anyone can change this in the ASCOM profile editor or in the source (SwitchDriver.cs and Program.cs).
 
-![3D Rendering](N.I.N.A.jpg)
+![N.I.N.A.-Switch-Connect](images/N.I.N.A.jpg)
 
-![3D Rendering](DOS1.jpg)
+![Console-App1](images/DOS1.jpg)
 
-![3D Rendering](DOS2.jpg)
+![Console-App2](images/DOS2.jpg)
 
-![3D Rendering](DOS3b.jpg)
+![Console-App3](images/DOS3b.jpg)
 
 Thanks to Julien
 
