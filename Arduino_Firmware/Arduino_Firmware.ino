@@ -6,13 +6,30 @@
 
 #include <Servo.h>
 
+#define TELESCOPE_RC10      0001
+#define TELESCOPE_GUIDER    0002
+#define TELESCOPE_TAK130    0003
+
+//enter the parameter for the device here, e.g. TELESCOPE_RC10 for the telescope named "RC10"
+#define TELESCOPE TELESCOPE_RC10
+
 constexpr auto DEVICE_GUID = "b45ba2c9-f554-4b4e-a43c-10605ca3b84d";
+#if (TELESCOPE == TELESCOPE_RC10)
+    const String TELESCOPE_NAME = "RC10";
+#elif (TELESCOPE == TELESCOPE_GUIDER)
+    const String TELESCOPE_NAME = "GUIDER";
+#elif (TELESCOPE == TELESCOPE_TAK130)
+    const String TELESCOPE_NAME = "TAK130";
+#endif
 
 constexpr auto COMMAND_PING = "COMMAND:PING";
 constexpr auto RESULT_PING = "RESULT:PING:OK:";
 
 constexpr auto COMMAND_INFO = "COMMAND:INFO";
-constexpr auto RESULT_INFO = "RESULT:DarkSkyGeek's Telescope Cover Firmware v1.0";
+const String RESULT_INFO ="RESULT: " + TELESCOPE_NAME + "-Telescope Cover Firmware v1.1";
+
+//new Command
+constexpr auto COMMAND_NAME = "COMMAND:NAME";
 
 constexpr auto COMMAND_GETSTATE = "COMMAND:GETSTATE";
 constexpr auto RESULT_STATE_UNKNOWN = "RESULT:STATE:UNKNOWN";
@@ -23,6 +40,9 @@ constexpr auto COMMAND_OPEN = "COMMAND:OPEN";
 constexpr auto COMMAND_CLOSE = "COMMAND:CLOSE";
 
 constexpr auto ERROR_INVALID_COMMAND = "ERROR:INVALID_COMMAND";
+
+// originally the delay was 30
+constexpr auto SPEED = 20;
 
 enum CoverState {
     open,
@@ -69,6 +89,9 @@ void loop() {
         else if (command == COMMAND_INFO) {
             sendFirmwareInfo();
         }
+        else if (command == COMMAND_NAME) {
+            sendTELESCOPE_NAME();
+        }		
         else if (command == COMMAND_GETSTATE) {
             sendCurrentState();
         }
@@ -93,6 +116,10 @@ void sendFirmwareInfo() {
     Serial.println(RESULT_INFO);
 }
 
+void sendTELESCOPE_NAME() {
+    Serial.println(TELESCOPE_NAME);
+}
+
 void sendCurrentState() {
     switch (state) {
     case open:
@@ -114,7 +141,7 @@ void openCover() {
     if (pos < 180) {
         for (; pos <= 180; pos++) {
             servo.write(pos);
-            delay(30);
+            delay(SPEED);
         }
     }
 
@@ -128,7 +155,7 @@ void closeCover() {
     if (pos > 0) {
         for (; pos >= 0; pos--) {
             servo.write(pos);
-            delay(30);
+            delay(SPEED);
         }
     }
 
