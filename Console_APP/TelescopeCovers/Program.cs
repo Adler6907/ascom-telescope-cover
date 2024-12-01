@@ -1,4 +1,4 @@
-﻿// This is a console application that can be used to test an ASCOM driver
+// This is a console application that can be used to test an ASCOM driver
 
 // #define UseChooser
 
@@ -23,7 +23,7 @@ namespace ASCOM
         static string TelescopeName = "ALL|TelescopeName1|TelescopeName2|...\t(given different names in the firmware)";
         static string TelescopeName1 = "TelescopeName1";
         static short numSwitch;
-        static bool LanguageGerman, verbose, UseChooser, allOpen, allClose, allState = false;
+        static bool LanguageGerman, verbose, silent, UseChooser, allOpen, allClose, allState = false;
         static short CountOpen, CountClose, CountState = 0;
         static string[] ArrayOpen, ArrayClose, ArrayState;
         static ASCOM.DriverAccess.Switch device;
@@ -55,13 +55,17 @@ namespace ASCOM
                         Program.verbose =    args[i].ToUpper() == "/VERBOSE" ||
                                              args[i].ToUpper() == "/V";
                     }
-
+                    if (!Program.silent)
+                    {
+                        Program.silent =     args[i].ToUpper() == "/SILENT" ||
+                                             args[i].ToUpper() == "/S";
+                    }
                     if (!Program.UseChooser)
                     {
-                        Program.UseChooser = args[i].ToUpper() == "/USECHOOSER" ||
-                                             args[i].ToUpper() == "/C" ||
-                                             args[i].ToUpper() == "/CHOOSE" ||
-                                             args[i].ToUpper() == "/CHOOSER";
+                        Program.UseChooser = args[i].ToUpper() == "/C" ||
+                                             args[i].ToUpper() == "/USECHOOSER" ||
+                                             args[i].ToUpper() == "/CHOOSER" ||
+                                             args[i].ToUpper() == "/CHOOSE";
                     }
 
                     if (args[i].Contains(":"))
@@ -268,11 +272,13 @@ namespace ASCOM
         }
         static void Parameters()
         {
-            Console.WriteLine($"\nSyntax        :: TelescopeCovers.exe Command1 [Command2] ... [Option]|/h");
-            Console.WriteLine($"\nCommandNr     :: TelescopeName:Command");
+            Console.WriteLine($"\nSyntax        :: TelescopeCovers.exe Command1 [Command2] ... [Option1-3]|/h");
+            Console.WriteLine($"\nCommandNr     :: [TelescopeName]:[Command]");
             Console.WriteLine($"TelescopeName :: {Program.TelescopeName}");
-            Console.WriteLine($"Command       :: OPEN|CLOSE|STATE");
-            Console.WriteLine($"Option        :: /v/c\n");
+            Console.WriteLine($"Command       :: OPEN|CLOSE|STATE\n");
+            Console.WriteLine($"Option1       :: /v|/VERBOSE");
+            Console.WriteLine($"Option2       :: /c|/USERCHOOSER|/CHOOSER|/CHOOSE");
+            Console.WriteLine($"Option3       :: /s|/SILENT\n");
             Console.WriteLine($"Example1      :: TelescopeCovers.exe {Program.TelescopeName1}:OPEN (opens the telescope \"{Program.TelescopeName1}\")");
             Console.WriteLine($"Example2      :: TelescopeCovers.exe ALL:CLOSE (closes all telescope)");
             Console.WriteLine($"Example3      :: TelescopeCovers.exe ALL:OPEN /v (Verbose Mode)");
@@ -314,13 +320,16 @@ namespace ASCOM
                 for (short i = 0; i < Program.numSwitch; i++)
                 {
                     device.SetSwitch(i, true);
-                    if (LanguageGerman)
+                    if (!Program.silent)
                     {
-                        Console.WriteLine($"Die Abdeckung vom Teleskop \"{device.GetSwitchName(i)}\" wurde geöffnet.");
-                    }
-                    else
-                    {
-                        Console.WriteLine($"Telecsope \"{device.GetSwitchName(i)}\" cover has been opened.");
+                        if (LanguageGerman)
+                        {
+                            Console.WriteLine($"Die Abdeckung vom Teleskop \"{device.GetSwitchName(i)}\" wurde geöffnet.");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"Telecsope \"{device.GetSwitchName(i)}\" cover has been opened.");
+                        }
                     }
                 }
             }
@@ -334,13 +343,16 @@ namespace ASCOM
                         if (device.GetSwitchName(j) == ArrayOpen[i])
                         {
                             device.SetSwitch(j, true);
-                            if (LanguageGerman)
+                            if (!Program.silent)
                             {
-                                Console.WriteLine($"Die Abdeckung vom Teleskop \"{ArrayOpen[i]}\" wurde geöffnet.");
-                            }
-                            else
-                            {
-                                Console.WriteLine($"Telecsope \"{ArrayOpen[i]}\" cover has been opened.");
+                                if (LanguageGerman)
+                                {
+                                    Console.WriteLine($"Die Abdeckung vom Teleskop \"{ArrayOpen[i]}\" wurde geöffnet.");
+                                }
+                                else
+                                {
+                                    Console.WriteLine($"Telecsope \"{ArrayOpen[i]}\" cover has been opened.");
+                                }
                             }
                             break;
                         }
@@ -360,13 +372,16 @@ namespace ASCOM
                 for (short i = 0; i < Program.numSwitch; i++)
                 {
                     device.SetSwitch(i, false);
-                    if (LanguageGerman)
+                    if (!Program.silent)
                     {
-                        Console.WriteLine($"Die Abdeckung vom Teleskop \"{device.GetSwitchName(i)}\" wurde geschlossen.");
-                    }
-                    else
-                    {
-                        Console.WriteLine($"Telecsope \"{device.GetSwitchName(i)}\" cover has been closed.");
+                        if (LanguageGerman)
+                        {
+                            Console.WriteLine($"Die Abdeckung vom Teleskop \"{device.GetSwitchName(i)}\" wurde geschlossen.");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"Telecsope \"{device.GetSwitchName(i)}\" cover has been closed.");
+                        }
                     }
                 }
             }
@@ -380,13 +395,16 @@ namespace ASCOM
                         if (device.GetSwitchName(j) == ArrayClose[i])
                         {
                             device.SetSwitch(j, false);
-                            if (LanguageGerman)
+                            if (!Program.silent)
                             {
-                                Console.WriteLine($"Die Abdeckung vom Teleskop \"{ArrayClose[i]}\" wurde geschlossen.");
-                            }
-                            else
-                            {
-                                Console.WriteLine($"Telecsope \"{ArrayClose[i]}\" cover has been closed.");
+                                if (LanguageGerman)
+                                {
+                                    Console.WriteLine($"Die Abdeckung vom Teleskop \"{ArrayClose[i]}\" wurde geschlossen.");
+                                }
+                                else
+                                {
+                                    Console.WriteLine($"Telecsope \"{ArrayClose[i]}\" cover has been closed.");
+                                }
                             }
                             break;
                         }
@@ -406,28 +424,36 @@ namespace ASCOM
             { // State cover for all telescopes
                 for (short i = 0; i < Program.numSwitch; i++)
                 {
+
                     if (device.GetSwitch(i))
                     {
-                        if (LanguageGerman)
+                        if (!Program.silent)
                         {
-                            Console.WriteLine($"Der Status vom Teleskop \"{device.GetSwitchName(i)}\" ist geöffnet.");
-                        }
-                        else
-                        {
-                            Console.WriteLine($"The status of telescope \"{device.GetSwitchName(i)}\" cover it is open.");
+                            if (LanguageGerman)
+                            {
+                                Console.WriteLine($"Der Status vom Teleskop \"{device.GetSwitchName(i)}\" ist geöffnet.");
+                            }
+                            else
+                            {
+                                Console.WriteLine($"The status of telescope \"{device.GetSwitchName(i)}\" cover it is open.");
+                            }
                         }
                     }
                     else
                     {
-                        if (LanguageGerman)
+                        if (!Program.silent)
                         {
-                            Console.WriteLine($"Der Status vom Teleskop \"{device.GetSwitchName(i)}\" ist geschlossen.");
-                        }
-                        else
-                        {
-                            Console.WriteLine($"The status of telescope \"{device.GetSwitchName(i)}\" cover it is closed.");
+                            if (LanguageGerman)
+                            {
+                                Console.WriteLine($"Der Status vom Teleskop \"{device.GetSwitchName(i)}\" ist geschlossen.");
+                            }
+                            else
+                            {
+                                Console.WriteLine($"The status of telescope \"{device.GetSwitchName(i)}\" cover it is closed.");
+                            }
                         }
                     }
+                        
                 }
             }
             else
@@ -441,24 +467,30 @@ namespace ASCOM
                         {
                             if (device.GetSwitch(j))
                             {
-                                if (LanguageGerman)
+                                if (!Program.silent)
                                 {
-                                    Console.WriteLine($"Der Status vom Teleskop \"{ArrayState[i]}\" ist geöffnet.");
-                                }
-                                else
-                                {
-                                    Console.WriteLine($"The status of telescope \"{ArrayState[i]}\" cover it is open.");
+                                    if (LanguageGerman)
+                                    {
+                                        Console.WriteLine($"Der Status vom Teleskop \"{ArrayState[i]}\" ist geöffnet.");
+                                    }
+                                    else
+                                    {
+                                        Console.WriteLine($"The status of telescope \"{ArrayState[i]}\" cover it is open.");
+                                    }
                                 }
                             }
                             else
                             {
-                                if (LanguageGerman)
+                                if (!Program.silent)
                                 {
-                                    Console.WriteLine($"Der Status vom Teleskop \"{ArrayState[i]}\" ist geschlossen.");
-                                }
-                                else
-                                {
-                                    Console.WriteLine($"The status of telescope \"{ArrayState[i]}\" cover it is closed.");
+                                    if (LanguageGerman)
+                                    {
+                                        Console.WriteLine($"Der Status vom Teleskop \"{ArrayState[i]}\" ist geschlossen.");
+                                    }
+                                    else
+                                    {
+                                        Console.WriteLine($"The status of telescope \"{ArrayState[i]}\" cover it is closed.");
+                                    }
                                 }
                             }
                             break;
