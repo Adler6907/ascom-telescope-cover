@@ -16,6 +16,8 @@ I renamed the ASCOM profile for the switch to "ASCOM.TelescopeCovers.Switch". Ho
 
 ![Console-App3](images/DOS3b.jpg)
 
+![Console-App3](images/open-TelescopCover_NINA.jpg)
+
 Thanks to Julien
 
 <!-- toc -->
